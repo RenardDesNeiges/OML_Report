@@ -1,0 +1,274 @@
+% the doc class is a modified ITE paper template
+\documentclass{two-col-epfl}
+
+%\usepackage{sectsty}
+\usepackage{graphicx}
+\usepackage{dblfloatfix}
+\usepackage{subcaption}
+\usepackage[T1]{fontenc}
+\usepackage{epigraph} %quotes
+\usepackage{bm} 
+\usepackage{wrapfig} 
+\usepackage{amssymb} %math symbols
+\usepackage{mathtools} %more math stuff
+\usepackage{amsthm} %theorems, proofs and lemmas
+\usepackage[ruled,vlined]{algorithm2e} %algoritms/pseudocode
+
+%% Theorem notation
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{problem}{Problem}[section]
+\newtheorem{property}{Property}[section]
+\newtheorem{remark}{Remark}[section]
+\newtheorem{definition}{Definition}[section]
+
+%% declaring abs so that it works nicely
+\DeclarePairedDelimiter\abs{\lvert}{\rvert}%
+\DeclarePairedDelimiter\norm{\lVert}{\rVert}%
+
+% importing bibliography packages and files
+\usepackage[
+backend=biber,
+style=numeric,
+sorting=ynt
+]{biblatex}
+\addbibresource{Bibliography.bib}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue]{hyperref}%
+
+\hyphenation{fe-de-ra-ted}
+
+\usepackage{listings}
+\usepackage{xcolor}
+
+\usepackage{subfiles}
+
+\NewDocumentCommand{\codeword}{v}{% for code words
+\texttt{\textcolor{darkgray}{#1}}%
+}
+\newcommand{\fedavg}{\texttt{FedAvg} }
+\newcommand{\fedprox}{\texttt{FedProx} }
+
+\begin{document}
+
+\headertitle{Project report - CS-439}
+%\footertitle{Submission for the first assignment of the CS-503 course at EPFL}
+
+%% generating the title section
+\title{An Insight into FedAVG and Data Heterogeneity}
+
+\author{Akash Dhasade (314979) \& Iris Kremer (337635) \& Titouan Renard (272257)}
+
+%\address{\add{1}{MT-RO, 272257}}
+\maketitle
+
+\input{comments}
+\textbf{Abstract}
+\textit{Abstract here.}
+\ad{Hello. You can now add comments as below. I can make them disappear by setting a boolean flag, so they don't have to be deleted.}
+\ik{Hello} \tr{Hello}
+\section{Introduction}
+
+% Briefly:
+% - What is federated learning?
+% - What are benefits and challenges?
+% - What are some existing algorithms? Cite corresponding papers
+
+The training of machine learning models is traditionally done by a single entity. This requires to have the entire training dataset in one place. However, there are situations in which aggregating all data in a single place is not possible, e.g. due to confidentiality issues. The federated learning setting provides an alternative solution that addresses this issue, in which the training of a machine learning model is distributed over multiple clients, that each possess part of the data~\cite{kairouz2021advances}. Each client optimizes the model on its local data and shares its gradients or updated weights with a central service provider, which aggregates the results from the different clients. Federated learning was initially introduced by McMahan et al in ~\cite{mcmahan2017communication}, in which the authors compare a baseline algorithm called \codeword{FedSGD} algorithm with their proposed improvement named \codeword{FedAVG}. \\
+
+Aside from possible privacy concerns, one of the main difficulties encountered in federated learning is dealing with the distribution of the training data across clients. Indeed, it is most often the case that the data is not independent and identically distributed (iid) across clients. This causes each client to converge to different local minima during the training, and the true minimum of the objective function on the entire data may not be a simple mean of the gradients from each client. In this setting, convergence is therefore more difficult to attain and good performance is not guaranteed. In our project, we work on the \codeword{FedAVG} algorithm and seek to showcase how non-iid data affect its performance and convergence.
+
+\section{FedAVG and Convergence}
+
+% Introduce FedAVG, cite mcmahan2017communication
+% Introduce proof of convergence briefly, cite wang2021field
+% - What it proves
+% - Assumptions and what they mean, see page 40 of wang2021field
+% - Final bound on convergence
+% - Refer to appendix for complete analysis of the proof (ask Titouan to add his analysis of the proof)
+
+As already mentioned, ~\cite{mcmahan2017communication} introduces the baseline algorithm \codeword{FedSGD} and an extension of this algorithm called \codeword{FedAVG}. \codeword{FedSGD} is the direct implementation of SGD in a distributed setting, where each client receives a model, performs one training step (on one batch) on its local data and sends the gradients to the server, which updates the model by averaging gradients across clients before sending the model back to the clients for the next step. However, the communication delay increases training time drastically. \codeword{FedAVG} is introduced as a response to this problem, by letting the clients perform several local update steps before aggregating the model. As data in the federated setting is non-iid across clients, \codeword{FedAVG} can fail when too many local steps are performed before aggregating. Still, the algorithm has been proven to converge in~\cite{wang2021field} under certain assumptions, and with the following bound on the convergence rate:
+
+\begin{equation}
+        \begin{aligned}
+            \mathbb{E} \left[ \frac{1}{\tau T} \sum_{t=0}^{T-1}\sum_{k=1}^{\tau} F(\bar{\bm{x}}^{(t,k)}) - F(\bm{x}^*)\right] 
+            \leq \\
+            \frac{D^2}{2 \eta \tau T} + \frac{\eta \sigma^2}{M} + 4 \tau \eta^2 L \sigma^2 + 18 \tau^2 \eta^2 L \zeta^2
+        \end{aligned}
+        \label{eq:convergence}
+    \end{equation}
+
+A detailed analysis of this proof can be found in the appendix of our report. However, for the purpose of our project, the only important aspect is that this bound gives us an upper limit on the convergence speed, and a lower limit on the loss. The bound is composed of four terms, but in our case, only the last one matters. Indeed, the first term approaches zero when the time $T$, i.e. the total number of rounds, goes to infinity, and the second and third ones are zero in our experiments, because we will only use full-batch gradient descent (more details in Section~\ref{sec:methods}), meaning our variance bound $\sigma^2$ is zero. So in our experiments, at infinite time, we end up with a bound given by
+
+\begin{equation}
+        \begin{aligned}
+            \mathbb{E} \left[ \frac{1}{\tau T} \sum_{t=0}^{T-1}\sum_{k=1}^{\tau} F(\bar{\bm{x}}^{(t,k)}) - F(\bm{x}^*)\right] 
+            \leq 18 \tau^2 \eta^2 L \zeta^2
+        \end{aligned}
+        \label{eq:convergence_our_experiments}
+    \end{equation}
+    
+Where $t \in [0, T)$ is the round index, $\tau$ is the number of client local steps, with $k \in [0, \tau)$, $\eta$ is the learning rate and $L$ is the smoothness constant of our loss function. $F(\bar{\bm{x}}^{(t,k)})$ is the loss at any time $t$ and $F(\bm{x}^*)$ is the optimal loss. $\zeta$ is a bound on the difference between the local gradient of each client and the global gradient, defined as:
+
+\begin{equation}
+\label{bound}
+     \max_{i} \sup_{\mathbf{x}} \lVert \nabla F_i(\mathbf{x}_i^{(t, k)}) - \nabla F(\mathbf{x}_i^{(t, k)}) \rVert \leq \zeta
+\end{equation}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.35\textwidth]{figures/FedAVG_traj.pdf}
+    \caption{An illustration of the behavior of \texttt{FedAVG} over one round of progression.}
+    \label{fig:fedAVGtrace}
+\end{figure}
+
+Where $i \in [1, M]$ is the client index (and $M$ the total number of clients), $\nabla F_i(\mathbf{x})$ is the local gradient on client $i$'s data and $\nabla F(\mathbf{x})$ is the global gradient. \\
+
+We are especially interested in the term $\zeta$, as it directly depends on the data homogeneity and increases when data is non-iid, as the gradient on the local data becomes a worse approximation of the gradient on the global data. In our experiments, we seek to demonstrate the slowdown in the convergence and worsening of the loss caused by such non-iid data distribution. \\
+
+% This paragraph can likely be shortened if we need more space
+Note that in real settings, there are a lot more issues than just non-iid data to be taken into account. For instance, not all clients have the same computing power, so some clients might be able to perform more local updates than others within the same time frame. Certain clients have more data than others, meaning the data amount is unbalanced across clients. Clients are not always available, so some will contribute more often to the global aggregation of the data than others. Also, not all updates will arrive at the same time to the server, nor will it be able to send the exact same version of the model to all clients, as not all of them will be available at the same time to receive it. These are just a few examples of complications that arise in real applications. But in our project, we only consider ideal conditions, i.e. all clients have the same amount of data, perform the same number of local steps and updates on the server are performed synchronously using data from all clients every time.  % TODO: check all clients? Fixed X clients?
+
+% \begin{figure*}[ht]
+%         \centering
+%          \begin{subfigure}[b]{\textwidth}  
+%             \centering 
+%             \includegraphics[trim=50 0 50 0, clip,width=\textwidth]{plots/full_data_htr_learning_curves.jpg}
+%             \caption{Learning curves for the \fedavg algorithm with varying client local steps $\tau$.} % TODO: Describe increasing $\tau \rightarrow$ increasing error offset.
+%             \label{fig:full_data_htr_learning_curves}
+%         \end{subfigure}
+%          \vskip\baselineskip
+%         \begin{subfigure}[b]{0.45\textwidth}   
+%             \centering 
+%             \includegraphics[trim=10 0 20 0,clip,width=\textwidth]{plots/full_data_htr_separator.jpg}
+%             \caption{Separators learnt under different local steps ($\tau$).} % TODO: Explain how increasing $\tau$ pushes lines.
+%             \label{fig:full_data_htr_separator}
+%         \end{subfigure}
+%         %\hfill
+%         \begin{subfigure}[b]{0.45\textwidth}   
+%             \centering 
+%             \includegraphics[trim=0 0 30 0,clip,width=\textwidth]{plots/full_data_htr_gradients.jpg}
+%             \caption{Dissimilarity between the local and global gradients.} % Measuring dissimilarity between the local gradient $\nabla_i F(x)$ and the global gradient $\nabla F(x)$. TODO:  Explain how this correlates to the learning curves in Fig.1.
+%             \label{fig:full_data_htr_gradients}
+%         \end{subfigure}
+%         \caption{Experiment 1 results}
+%         \label{fig:exp1}
+% \end{figure*}
+
+
+\begin{figure*}[ht]
+        \centering
+         \begin{subfigure}[b]{0.33\textwidth}  
+            \centering 
+            \includegraphics[trim=10 0 20 20, clip,width=\textwidth]{plots/full_data_htr_learning_curves_loss.jpg}
+            \caption{Learning curves for the \fedavg algorithm with varying client local steps $\tau$.} % TODO: Describe increasing $\tau \rightarrow$ increasing error offset.
+            \label{fig:full_data_htr_learning_curves}
+        \end{subfigure}
+        \begin{subfigure}[b]{0.33\textwidth}   
+            \centering 
+            \includegraphics[trim=10 0 20 0,clip,width=\textwidth]{plots/full_data_htr_separator.jpg}
+            \caption{Separators learnt under different local steps ($\tau$).} % TODO: Explain how increasing $\tau$ pushes lines.
+            \label{fig:full_data_htr_separator}
+        \end{subfigure}
+        %\hfill
+        \begin{subfigure}[b]{0.33\textwidth}   
+            \centering 
+            \includegraphics[trim=0 0 30 0,clip,width=\textwidth]{plots/full_data_htr_gradients.jpg}
+            \caption{Dissimilarity between the local and global gradients.} % Measuring dissimilarity between the local gradient $\nabla_i F(x)$ and the global gradient $\nabla F(x)$. TODO:  Explain how this correlates to the learning curves in Fig.1.
+            \label{fig:full_data_htr_gradients}
+        \end{subfigure}
+        \caption{Experiment 1 results}
+        \label{fig:exp1}
+\end{figure*}
+
+\section{Methods}
+\label{sec:methods}
+
+% Introduce our experiment(s)
+% - What is our setup? Data, model, baseline experiments, our experiments
+
+We perform several experiments to investigate the effect of using non-iid data to train a model with \codeword{FedAVG}. Some experiments are done on simple synthetic data, and others are done on the more complex dataset FEMNIST.
+
+\subsection{Synthetic data experiments}
+
+% Check loss used?
+We first create a simple toy setup with synthetic data for $M=20$ clients, where we use a basic perceptron with L2 loss to perform a classification task between two classes. We generate artificial non-iid data for the clients, where each client has $N = [TODO]$ data points of each class. For all clients, the data of the first class is distributed as a gaussian of mean $([TODO], [TODO])$ and variance $([TODO], [TODO])$. The first $M-1$ clients have the data of the second class distributed as a gaussian of mean $([TODO], [TODO])$ and variance $([TODO], [TODO])$, while the last client $M$ has the data of the second class distributed as a gaussian of mean $([TODO], [TODO])$ and variance $([TODO], [TODO])$. Test data is generated the same way, but with [TODO] data points.
+
+% TODO: What is our learning rate for each client? Do we use an optimal lr? Or at least are we sure that it fits the proof?
+Experiment 1 is to run \codeword{FedAVG} on this non-iid data with different values of client local steps $\tau \in \{50, 300, 1000, 3000\}$. Indeed, we choose to always use the same data and client learning rate $\eta = [TODO]$, and more client local steps to accentuate the difference between local and global gradients, highlighting the effect of a higher $\zeta$. We make the experiments more comparable by fixing the weight values to $[[TODO], [TODO]]$, which is the vector between the means of the gaussian distributions of the two classes, and only optimizing the bias. To have a baseline comparison, we run an additional experiment with $\tau = 3000$ on the exact same data, but redistributed across clients to have an iid distribution between them.
+
+Experiment 2 is made to compare \codeword{FedAVG} with \codeword{FedProx}~\cite{li2020federated}, another federated learning algorithm, which introduces a flexible amount of local steps for each client and a local \enquote{proximal term}. This algorithm is likely to reduce the impact of non-iid data, because the local proximal term forces the local weights to remain closer to the global weights. It also addresses the issue of varying computation power and availability across clients, but since we do not investigate this aspect in our project, we set the number of client local steps in \codeword{FedProx} to a fixed value. We run both \codeword{FedAVG} and \codeword{FedProx} with $\tau = 3000$ local steps on our non-iid synthetic data to visualise the difference.
+
+\subsection{Experiment on FEMNIST}
+
+While experimenting with synthetic data gives useful insights for understanding, it is difficult to emulate a real world task with such datasets. Therefore, it is essential to run experiments on a real dataset as well. FEMNIST was introduced as a benchmark dataset for federated learning~\cite{caldas2018leaf}, and is the extended MNIST dataset partitioned by the writer of the character.
+
+Experiment 3 consists of running \codeword{FedAVG} on FEMNIST with iid partitioning, i.e. distributing the data randomly across clients, and on non-iid FEMNIST partitioned by the writer. We use $M=[TODO]$ clients and $\tau = [TODO]$ client local steps for these experiments. [TODO: Model used? Parameters?]
+% Is it possible to plot zeta for each round for the FEMNIST experiments too?
+
+\section{Results}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[scale=0.45]{plots/fedprox_data_htr_learning_curves_loss.jpg}
+    \caption{Comparison of \fedavg and \fedprox algorithm. When the dataset is non-IID partitioned, the \fedprox algorithm effectively alleviates client-drift by forcing clients to stay close to the server model.}
+    \label{fig:fedprox_data_htr}
+\end{figure}
+
+\begin{figure}[b]
+    \centering
+    \includegraphics[width=0.45\textwidth]{plots/femnist_iid_vs_niid_loss_acc.jpg}
+    \caption{Performance difference of \fedavg on the FEMNIST dataset under IID and non-IID data partitioning. Under heterogeneous data, \fedavg converges slowly while also reaching a lower convergence accuracy.}
+    \label{fig:femnist_iid_vs_niid}
+\end{figure}
+
+% Show plots, explain what we plot
+% Explain observed results, refer back to the assumptions and proof
+
+\subsection{Experiment 1: FedAVG on synthetic data}
+
+For this experiment, we plot the loss and accuracy over the rounds on the testing data for each different training setting in figure~\ref{fig:full_data_htr_learning_curves}, as well as the final separator obtained each time in figure~\ref{fig:full_data_htr_separator}, and the maximum divergence measure between local gradients $\nabla_i F(x)$ and the global gradient $\nabla F(x)$ after each round in figure~\ref{fig:full_data_htr_gradients}. As we can see from the resulting plots, we do not observe a real slow down of the convergence due to the little amount of data that we have and the constraints we set in our experiment settings (i.e. only optimising the bias term). However, we do see a clear increase in the divergence of local vs. global gradients, therefore also of $\zeta$, with non-iid data, and the final separators to which the algorithm converges are clearly worse when local gradients diverge a lot from the global gradient.
+
+\subsection{Experiment 2: FedAVG vs. FedProx}
+
+Figure~\ref{fig:fedprox_data_htr} shows the accuracies and losses on test data over rounds obtained in the second experiment. We see that indeed, \codeword{FedProx} does not encounter the same convergence issue than \codeword{FedAVG} and reaches a very good accuracy thanks to the proximal term constraint on the local weights that keeps them close to the global weights.
+
+\subsection{Experiment 3: FedAvg on FEMNIST}
+
+The test loss and accuracy for iid and non-iid partitioning of FEMNIST are shown in Figure~\ref{fig:femnist_iid_vs_niid}. Contrasting with our synthetic data results, here, we do observe a slower convergence with non-iid data, meaning training on non-iid data requires more steps to be performed to reach a good accuracy. [TODO: does it lead to a lower accuracy as well?]
+
+\section{Conclusion}
+
+% What have we shown?
+% Future directions?
+
+[TODO]
+
+\printbibliography
+
+%\section{Appendix}
+%\label{appendix}
+
+%\subfile{appendix.tex}
+
+\end{document}
+
+
+% Need to introduce complete bound somewhere
+% Bound on convergence rate also gives lower bound of loss
+% Zeta is zero for iid data -> loss can converge to zero
+% Sigma is always zero cause we have full batch, i.e. no stochastic gradients
+% First term of the bound always goes to zero when time T -> infinity
+% What is mu used in FedProx
+
+
+% FedAVG on synthetic data always choose two clients, one is an outlier
+% FEMNIST is 20 clients per round, about 3300 clients in total, let Akash fill in exact value
+
+
+% Remove accuracies from the plots, we don't need them -> make space, except for the FEMNIST one that we keep to comment on the convergence rate
+% Reduce lr for synthetic data experiment to see curvature of the convergence
+
+
+% We build synthetic data to build heterogeneity
+% Keep the abstract
